@@ -1,0 +1,266 @@
+.\" shdocker
+.\"
+.\" Copyright (c) 2021 The Shdocker Contributors
+.\"
+.\" Permission is hereby granted, free of charge, to any person obtaining a copy
+.\" of this software and associated documentation files (the "Software"), to deal
+.\" in the Software without restriction, including without limitation the rights
+.\" to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+.\" copies of the Software, and to permit persons to whom the Software is
+.\" furnished to do so, subject to the following conditions:
+.\"
+.\" The above copyright notice and this permission notice shall be included in all
+.\" copies or substantial portions of the Software.
+.\"
+.\" THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+.\" IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+.\" FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+.\" AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+.\" LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+.\" OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+.\" SOFTWARE.
+
+.\" Define a code example block
+.de CODE
+.br
+.RS
+.nf
+.nh
+..
+.\" End code example block
+.de ECODE
+.hy
+.fi
+.RE
+..
+
+.TH SHDOCKER 1 "" "" "User Commands"
+.SH NAME
+shdocker \- a tiny shell utility to dynamically generate dockerfiles
+.SH SYNOPSIS
+\fBshdocker\fR [\fB--help\fR] [\fB--version\fR]
+
+\fBshdocker\fR [\fIOPTIONS\fR] \fI[-- DOCKER_BUILD_ARGS...]\fR
+
+.SH DESCRIPTION
+
+\fBTL;DR\fR It takes but a second to learn \fBshdocker\fR. In most cases, a look at
+\fIEXAMPLES\fR will suffice.
+
+\fBShdocker is a tiny bash program with these features:\fR
+
+.RS 4
+- Generate multiple docker image variants with a single shDockerfile
+
+- Use any shell features to customize the docker build
+
+- No learning curve if you already know bash
+.RE
+
+The procedure is dead simple:
+
+.RS 4
+- Create a \fIshDockerfile\fR
+
+- Run \fBshdocker\fR with or without options
+
+- End up with an actual Dockerfile or with a built image
+.RE
+
+The beauty of a shDockerfile is that its commands are a superset of a normal
+Dockerfile's commands. Most valid Dockerfiles are also valid shDockerfiles.
+Those that aren't can be made so with trivial modifications.
+
+Most common invocations of \fBshdocker\fR will generate a Dockerfile (either as
+a file or print to stdout, see \fIOPTIONS\fR). But if you specify any positional
+arguments, shdocker will also invoke \fBdocker build\fR with those arguments and
+will use the generated Dockerfile for that build.
+
+\fBWARNING:\fR shDockerfile is just a bash script! In it, you can use
+anything you would be able to use in any bash script. The only commands that
+have special behavior are those supported by Dockerfile (\fBRUN\fR, \fBCMD\fR,
+etc.), and those defined in
+\fIAdditional shell functions\fR.
+
+\fBWARNING:\fR If you are porting an existing Dockerfile to a more flexible
+shDockerfile, take a look at \fIPITFALLS\fR first.
+
+.SH PITFALLS
+
+When rewriting a Dockerfile as a shDockerfile, you must have a fair
+understanding of bash. Dockerfile commands can contain symbols that have a
+special meaning in bash, such as logical operators, redirection, pipes, etc.
+
+For example, if the following line is found in a \fIDockerfile\fR, it can't be
+directly copied into a shDockerfile:
+
+.CODE
+RUN mkdir dir && chmod -R user dir
+.ECODE
+
+If you just copied it verbatim, it would be parsed as two commands:
+
+.CODE
+RUN mkdir dir  # This will be included into the Dockerfile
+chmod -R user dir  # This is a regular command
+.ECODE
+
+which is not what we want.
+
+To get around this, we could wrap the offending part in quotes, like:
+
+.CODE
+RUN mkdir dir '&&' chmod -R user dir
+.ECODE
+
+\fBNOTE:\fR Quotes are parsed in the usual way by the bash shell.
+
+\fBNOTE:\fR Remember that commands matching those in a regular Dockerfile will
+always be capitalized.
+
+.SH OPTIONS
+
+.TP
+.BR \-h ", " \-\-help
+Prints a help message.
+
+.TP
+.BR \-v ", " \-\-version
+Prints the \fBshdocker\fR version and supported \fBdocker\fR version.
+
+.TP
+.BR \-s ", " \-\-shdockerfile " \fIFILE\fR"
+Use \fIFILE\fR as the input shDockerfile. If this option is missing,
+\fIshDockerfile\fR from the working directory is used.
+
+.TP
+.BR \-d ", " \-\-dockerfile " \fIFILE\fR"
+Generate the Dockerfile as \fIFILE\fR. If \fIFILE\fR is equal to '-', output
+will be to stdout.
+
+.SH ENVIRONMENT
+
+shDockerfiles are bash scripts, with a few predefined commands matching those
+available in a regular Dockerfile. In addition to those, shDockerfile accepts
+some additional commands (see \fBAdditional shell functions\fR).
+
+Since shDockerfile is just a bash script, regular and environment variables
+can be used freely. The only limitation is that variables starting with \fB__\fR
+(two underscores) are reserved for \fBshdocker\fR's internal use. The same goes
+for bash functions, with the addition of regular Dockerfile commands which are
+reserved as well of course.
+
+.SS Additional shell functions
+
+.TP
+\fBREQUIRE_ENV\fR
+.RS 4
+Require the existence of environment variables with the specified names. If the
+specified variables do not exist, \fBshdocker\fR will refuse to continue
+processing the shDockerfile, and will exit with a non-zero code.
+.RE
+
+.TP
+\fBTAG\fR
+.RS 4
+Set a default tag for the built image, if \fB-t/--tag\fR is not specified as a
+\fBdocker build\fR argument. This command has no effect on the generated
+Dockerfile.
+.RE
+
+.TP
+\fB_\fR (underscore)
+.RS 4
+Add a comment that will be included into the Dockerfile. Keep in mind that this
+is a function and therefore the arguments will be parsed regularly by the shell.
+You may have to use quotes.
+.RE
+
+.SH EXAMPLES
+
+.SS Simple usage of environment variables
+.BR
+
+Take a look at this example file:
+
+.CODE
+# file: shDockerfile
+FROM "$base"
+RUN "echo 'This image was built on top of the $base image'"
+.ECODE
+
+In this example, the base image name is read from the \fIbase\fR environment
+variable, taken at the point where \fBshdocker\fR was invoked.
+
+If we run \fBbase=ubuntu shdocker --dockerfile Dockerfile\fR, this will generate the
+following Dockerfile:
+
+.CODE
+FROM ubuntu
+RUN echo 'This image was built on top of the ubuntu image'
+.ECODE
+
+We can then pass this Dockerfile to a \fBdocker build\fR command, or we can just
+build it directly by running:
+
+.RS 4
+\fBbase=ubuntu shdocker --dockerfile Dockerfile -- . --tag test\fR
+.RE
+
+Any time you specify a context directory, shdocker will also build an image from
+the generated Dockerfile. Note that the \fB--\fR is necessary to tell
+\fBshdocker\fR that it shouldn't parse \fB--tag\fR as an option to itself, but
+let \fBdocker build\fR parse it as its own.
+
+.SS More advanced example utilizing bash features
+.BR
+
+.\" Keep in sync with examples/
+.\" TODO Make this file a tem template
+.CODE
+# file: Buildrules
+REQUIRE_ENV base
+[ -z "$ver" ] && ver="latest"
+FROM "$base"
+# Install dependencies
+if [ "$base" = "ubuntu" ]; then
+    RUN apt-get install git
+elif [ "$base" = "archlinux" ]; then
+    RUN pacman -S install git
+else
+    : # Do nothing
+fi
+CMD git clone "https://github.com/veracioux/shdocker"
+# Default tag in case you don't specify a --tag option
+TAG "test:$ver-$base"
+.ECODE
+
+If you run:
+
+.RS 4
+\fBbase=archlinux ver=0.1.0 shdocker --shdockerfile Buildrules --dockerfile Dfile\fR
+.RE
+
+you will get the following Dockerfile:
+
+.CODE
+FROM archlinux
+# Install dependencies
+RUN pacman -S install git
+CMD git clone https://github.com/veracioux/shdocker
+.ECODE
+
+If you extend the last command by appending a context directory argument, it
+will build an image using that context directory. Thanks to the \fBTAG\fR
+command, if you don't pass a \fB-t/--tag\fR option , the image will be tagged
+\fBtest:0.1.0-archlinux\fR.
+
+\fBWARNING:\fR If you are porting an existing Dockerfile to a more flexible
+shDockerfile, take a look at \fIPITFALLS\fR first.
+
+\fBNOTE:\fR All the demonstrated options have short versions (see \fIOPTIONS\fR).
+
+.\" TODO Projects using shdocker
+
+.SH SEE ALSO
+dockerfile(1), bash(1), docker(1)

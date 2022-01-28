@@ -56,7 +56,13 @@ __DOCKERFILE_COMMANDS=(
     FROM MAINTAINER RUN CMD POINT LABEL EXPOSE ENV ADD COPY ENTRYPOINT VOLUME
     USER WORKDIR ARG ONBUILD STOPSIGNAL HEALTHCHECK SHELL
 )
-__SHDOCKERFILE="$(realpath shDockerfile)"
+# Input is from a tty => use default shDockerfile
+if [ -t 0 ]; then
+    __SHDOCKERFILE="$(realpath shDockerfile)"
+# Else, the contents of shDockerfile will be read from stdin
+else
+    __SHDOCKERFILE=()
+fi
 # Indicates whether a dockerfile was specified in options
 __OPT_DOCKERFILE=""
 
@@ -103,11 +109,16 @@ do
             continue ;;
         '-s'|'--shdockerfile')
             __SHDOCKERFILE="$(realpath "${__options[((i+1))]}")"
+            if [ "$__SHDOCKERFILE" != "-" ]; then
+                __SHDOCKERFILE="$(realpath "$__SHDOCKERFILE")"
+            else
+                __SHDOCKERFILE=()
+            fi
             continue ;;
     esac
 done
 
-if [ ! -f "$__SHDOCKERFILE" ]; then
+if [ -n "$__SHDOCKERFILE" ] && [ ! -f "$__SHDOCKERFILE" ]; then
     echo "shdocker: error: File $__SHDOCKERFILE could not be found."
     exit 1
 fi
@@ -186,11 +197,13 @@ _() {
 # ┃ SHDOCKER SCRIPT START ┃
 # ┗━━━━━━━━━━━━━━━━━━━━━━━┛
 
+# Output Dockerfile is a real file
 if [ "$__PSEUDO_DOCKERFILE" != "-" ]; then
-    source "$__SHDOCKERFILE" > "$__PSEUDO_DOCKERFILE"
+    source <(cat "${__SHDOCKERFILE[@]}") > "$__PSEUDO_DOCKERFILE"
     __BUILD_DOCKERFILE="$__PSEUDO_DOCKERFILE"
+# Output is to stdout
 else
-    source "$__SHDOCKERFILE" | tee "$__DEFAULT_DOCKERFILE"
+    source <(cat "${__SHDOCKERFILE[@]}") | tee "$__DEFAULT_DOCKERFILE"
     __BUILD_DOCKERFILE="$__DEFAULT_DOCKERFILE"
 fi
 

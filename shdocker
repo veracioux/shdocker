@@ -22,6 +22,11 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+if [ "$EUID" == '0' ]; then
+    echo "shdocker: error: You can't run shdocker as the root user!" >&2
+    exit 1
+fi
+
 __SHDOCKER_VERSION='develop'  # Actual version injected by Makefile
 __DOCKER_VERSION=''  # Ditto
 
@@ -117,8 +122,28 @@ if [ -z "$__OPT_DOCKERFILE" ] && [ "${#__positional[@]}" = 0 ]; then
     __PSEUDO_DOCKERFILE="-"
 fi
 
+# ┏━━━━━━━━━━━━━━━━━━┓
+# ┃ HELPER FUNCTIONS ┃
+# ┗━━━━━━━━━━━━━━━━━━┛
+
+# Get a list of quoted arguments where necessary. Only ' and " characters are
+# escaped where necessary, others are untouched
+__quote() {
+    local arg args
+    args=''
+
+    for arg in "$@"; do
+        if grep -q "['\" \\\\]" <<<"$arg"; then
+            arg="$(sed -e 's:\\:\\\\:g' -e 's:":\\":g' -e 's:.*:"&":' <<<"$arg")"
+            echo -n "$args$arg "
+        else
+            echo -n "$args$arg "
+        fi
+    done | sed 's:\s*$::'  # Remove trailing whitespace
+}
+
 __dockerfile_command() {
-    echo "$@"
+    echo "$1" "$(__quote "${@:2}")"
 }
 
 # ┏━━━━━━━━━━━━━━━┓

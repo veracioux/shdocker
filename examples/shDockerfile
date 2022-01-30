@@ -13,3 +13,4 @@ CMD git clone "https://github.com/veracioux/shdocker"
 # Default tag in case you don't specify a --tag option
 TAG "test:$ver-$base"
 
+# vim: filetype=dockerfile

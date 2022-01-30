@@ -12,8 +12,10 @@ build:
 
 install: build
 	@# Install
-	mkdir -p "${DESTDIR}${PREFIX}/bin"
+	mkdir -p "${DESTDIR}${PREFIX}/bin" \
+			 "${DESTDIR}${PREFIX}/lib/shdocker"
 	install -Dm755 _build/shdocker "${DESTDIR}${PREFIX}/bin/"
+	install -Dm755 converter.sh    "${DESTDIR}${PREFIX}/lib/shdocker/"
 
 clean:
 	rm -rf _build

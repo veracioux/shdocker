@@ -22,13 +22,109 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+# ┏━━━━━━━━━━━━━┓
+# ┃ Description ┃
+# ┗━━━━━━━━━━━━━┛
+#
+#  Shdocker can run in two modes:
+#
+#  1. The first one just takes in a shDockerfile and generates a Dockerfile,
+#     writing it either to a file or to stdout
+#  2. The second one does all of the above and also builds an image from the
+#     generated Dockerfile
+#
+#  Since the shDockerfile can contain arbitrary shell commands, and there is no
+#  straightforward way to setup a sandbox, the processing of the shDockerfile
+#  must be done inside a container in order to protect the user from fatal
+#  mistakes.
+#
+#  Therefore, we run THIS SCRIPT AGAIN in an alpine container with the
+#  __SHDOCKER_INSIDE_CONTAINER env variable set, so that it knows that it should
+#  only generate a Dockerfile from a shDockerfile. On the flipside, this script
+#  without __SHDOCKER_INSIDE_CONTAINER (the instance that the user originally
+#  called) knows that it should not generate the Dockerfile, but instead use the
+#  generated Dockerfile to build a docker image.
+
+# ┏━━━━━━━━━━━━━━━━━━┓
+# ┃ HELPER FUNCTIONS ┃
+# ┗━━━━━━━━━━━━━━━━━━┛
+
+# Check if the 'docker' command exists on the system
+__check_docker() {
+    if ! which docker >/dev/null; then
+        echo "shdocker: error: docker command not found on the system" 2>&1
+        # TODO add docker version check
+        exit 1
+    fi
+}
+
+# Check if this instance of shdocker is running in a docker container
+__is_inside_docker_container() {
+    [ -f /.dockerenv ] && [ -n "$__SHDOCKER_INSIDE_CONTAINER" ]
+}
+
+# Usage: __find_docker_image <image_name>
+# Prints the exact image reference (<image_name>:<tag>) or returns 1 if it
+# doesn't exist
+__find_docker_image() {
+    results="$(
+        docker images --filter "reference=$1:*" \
+            --format "{{.Repository}}:{{.Tag}}" |
+        head -1
+        )"
+    [ -n "$results" ] && echo "$results"
+}
+
+# Run shdocker inside a docker container
+__pull_alpine_image_if_missing() {
+    local alpine_image response
+    if [ -t 1 ]; then
+        echo -ne "\033[1;34m" >&2
+        echo -e "To protect you from malicious shDockerfiles, shdocker must run" \
+                "some\ncommands inside a docker container." >&2
+        echo -ne "\033[1;0m" >&2
+    fi
+    alpine_image="$(__find_docker_image alpine)"
+    if [ -z "$alpine_image" ]; then
+        echo "We must run 'docker pull alpine' (only this first time)." 2>&1
+        echo -n "-- Is that OK? [y/N]: " 2>&1
+        read -n 1 response
+        if [ "$response" = "y" ] || [ "$response" = "Y" ]; then
+            echo
+            docker pull alpine || { echo "Pulling failed. Aborting." 2>&1; exit 1; }
+        else
+            exit 1
+        fi
+    fi
+}
+
+__convert() {
+    local converter  # Path to the shDockerfile->Dockerfile converter script
+    if [ "$__SHDOCKER_VERSION" = "develop" ]; then
+        converter="$(dirname "${BASH_SOURCE[0]}")"/converter.sh 
+    else
+        converter="$__SHDOCKER_PREFIX"/lib/shdocker/converter.sh
+    fi
+    local __SHDOCKER_INSIDE_CONTAINER
+    export __SHDOCKER_INSIDE_CONTAINER='true'
+    # Concatenate the converter script with the shDockerfile and pipe it to bash
+    # launched inside a docker container.
+    cat "$converter" <(cat) |
+        docker run --env-file <(env | cut -f1 -d= | grep -v '^PATH$') -i bash bash
+}
+
+__print_and_exec() {
+    echo "$@"
+    "$@"
+}
+
 if [ "$EUID" == '0' ]; then
     echo "shdocker: error: You can't run shdocker as the root user!" >&2
     exit 1
 fi
 
-__SHDOCKER_VERSION='develop'  # Actual version injected by Makefile
-__DOCKER_VERSION=''  # Ditto
+__SHDOCKER_VERSION="develop"  # Actual version is injected by Makefile
+__DOCKER_VERSION=""  # Ditto
 
 __print_usage() {
     echo -e "usage: shdocker [OPTIONS] [-- DOCKER_BUILD_ARGS...]"
@@ -39,23 +135,14 @@ __print_usage() {
     echo -e "  -d, --dockerfile   FILE  \toutput Dockerfile, or - for stdout"
 }
 
-__print_and_exec() {
-    echo "$@"
-    "$@"
-}
-
 # ┏━━━━━━━━━━━━━━━━┓
 # ┃ DEFAULT VALUES ┃
 # ┗━━━━━━━━━━━━━━━━┛
 
 # Default output dockerfile in case it's not specified as an option
-__DEFAULT_DOCKERFILE="$(mktemp -d /tmp/shdocker.XXXXXXXX)/Dockerfile"
+__RANDOM_DOCKERFILE="$(mktemp -d /tmp/shdocker.XXXXXXXX)/Dockerfile"
 # Pseudo output Dockerfile ('-' is a special value meaning stdout)
-__PSEUDO_DOCKERFILE="$__DEFAULT_DOCKERFILE"
-__DOCKERFILE_COMMANDS=(
-    FROM MAINTAINER RUN CMD POINT LABEL EXPOSE ENV ADD COPY ENTRYPOINT VOLUME
-    USER WORKDIR ARG ONBUILD STOPSIGNAL HEALTHCHECK SHELL
-)
+__PSEUDO_DOCKERFILE="$__RANDOM_DOCKERFILE"
 # Input is from a tty => use default shDockerfile
 if [ -t 0 ]; then
     __SHDOCKERFILE="$(realpath shDockerfile)"
@@ -118,6 +205,8 @@ do
     esac
 done
 
+__check_docker
+
 if [ -n "$__SHDOCKERFILE" ] && [ ! -f "$__SHDOCKERFILE" ]; then
     echo "shdocker: error: File $__SHDOCKERFILE could not be found."
     exit 1
@@ -133,89 +222,30 @@ if [ -z "$__OPT_DOCKERFILE" ] && [ "${#__positional[@]}" = 0 ]; then
     __PSEUDO_DOCKERFILE="-"
 fi
 
-# ┏━━━━━━━━━━━━━━━━━━┓
-# ┃ HELPER FUNCTIONS ┃
-# ┗━━━━━━━━━━━━━━━━━━┛
+# Generate Dockerfile from shDockerfile
 
-# Get a list of quoted arguments where necessary. Only ' and " characters are
-# escaped where necessary, others are untouched
-__quote() {
-    local arg args
-    args=''
-
-    for arg in "$@"; do
-        if grep -q "['\" \\\\]" <<<"$arg"; then
-            arg="$(sed -e 's:\\:\\\\:g' -e 's:":\\":g' -e 's:.*:"&":' <<<"$arg")"
-            echo -n "$args$arg "
-        else
-            echo -n "$args$arg "
-        fi
-    done | sed 's:\s*$::'  # Remove trailing whitespace
-}
-
-__dockerfile_command() {
-    echo "$1" "$(__quote "${@:2}")"
-}
-
-# ┏━━━━━━━━━━━━━━━┓
-# ┃ API FUNCTIONS ┃
-# ┗━━━━━━━━━━━━━━━┛
-
-for __docker_cmd in "${__DOCKERFILE_COMMANDS[@]}"; do
-    eval "$__docker_cmd() { __dockerfile_command $__docker_cmd \"\$@\"; }"
-done
-
-TAG() {
-    __IMAGE_TAG="$1"
-}
-
-# Specify a list of environment variables that must exist when shdocker is run.
-# If some of the variables don't exist, print an error message and exit.
-#
-#   Usage: REQUIRE_ENV VARIABLE_NAMES...
-#
-REQUIRE_ENV() {
-    local missing
-    missing="$(
-        for var in "$@"; do
-            [[ ! -v "$var" ]] && echo "$var"
-        done
-    )"
-    if [ -n "$missing" ]; then
-        echo "The following environment variables must be set for this shDockerfile:" >&2
-        echo "$missing" | sed 's/^/    /' >&2
-        exit 1
-    fi
-}
-
-# Print a comment with the content taken from arguments
-_() {
-    echo '#' "$@"
-}
-
-# ┏━━━━━━━━━━━━━━━━━━━━━━━┓
-# ┃ SHDOCKER SCRIPT START ┃
-# ┗━━━━━━━━━━━━━━━━━━━━━━━┛
-
-# Output Dockerfile is a real file
+__pull_alpine_image_if_missing
+export __IMAGE_TAG_OUTPUT_FILE="$(mktemp /tmp/shdocker.XXXXXXXXXXXXXXXXXXXX)"
 if [ "$__PSEUDO_DOCKERFILE" != "-" ]; then
-    source <(cat "${__SHDOCKERFILE[@]}") > "$__PSEUDO_DOCKERFILE"
-    __BUILD_DOCKERFILE="$__PSEUDO_DOCKERFILE"
-# Output is to stdout
+    # Output Dockerfile is a real file
+    cat "${__SHDOCKERFILE[@]}" | __convert > "$__PSEUDO_DOCKERFILE"
+    __BUILT_DOCKERFILE="$__PSEUDO_DOCKERFILE"
 else
-    source <(cat "${__SHDOCKERFILE[@]}") | tee "$__DEFAULT_DOCKERFILE"
-    __BUILD_DOCKERFILE="$__DEFAULT_DOCKERFILE"
+    # Output is to stdout
+    cat "${__SHDOCKERFILE[@]}" | __convert | tee "$__RANDOM_DOCKERFILE"
+    __BUILT_DOCKERFILE="$__RANDOM_DOCKERFILE"
 fi
 
-# Docker build
-
-__EXTRA_ARGS=()
-if [ -n "$__IMAGE_TAG" ]; then
-    __EXTRA_ARGS=(--tag "$__IMAGE_TAG")
-fi
-
+# Run docker build from the generated Dockerfile
 if [ "${#__positional[@]}" -gt 0 ]; then
-    __print_and_exec docker build "${__EXTRA_ARGS[@]}" "${__positional[@]}" -f "$__BUILD_DOCKERFILE"
+    # Build 
+    __EXTRA_ARGS=()
+    __IMAGE_TAG="$(cat "$__IMAGE_TAG_OUTPUT_FILE")"
+    if [ -n "$__IMAGE_TAG" ]; then
+        __EXTRA_ARGS=(--tag "$__IMAGE_TAG")
+    fi
+    __print_and_exec docker build "${__EXTRA_ARGS[@]}" "${__positional[@]}" \
+        -f "$__BUILT_DOCKERFILE"
 fi
 
 # vim: filetype=sh foldmethod=syntax

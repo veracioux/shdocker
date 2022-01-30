@@ -60,7 +60,7 @@ shdocker \- a tiny shell utility to dynamically generate dockerfiles
 The procedure is dead simple:
 
 .RS 4
-- Create a \fIshDockerfile\fR
+- Create a shDockerfile
 
 - Run \fBshdocker\fR with or without options
 
@@ -82,6 +82,10 @@ have special behavior are those supported by Dockerfile (\fBRUN\fR, \fBCMD\fR,
 etc.), and those defined in
 \fIAdditional shell functions\fR.
 
+\fBNOTE:\fR In order to protect your system from malformed/malicious
+shDockerfiles, the Dockerfile generation process happends inside a docker
+container based on an official \fBalpine\fR image.
+
 \fBWARNING:\fR If you are porting an existing Dockerfile to a more flexible
 shDockerfile, take a look at \fIPITFALLS\fR first.
 
@@ -89,9 +93,18 @@ shDockerfile, take a look at \fIPITFALLS\fR first.
 
 When rewriting a Dockerfile as a shDockerfile, you must have a fair
 understanding of bash. Dockerfile commands can contain symbols that have a
-special meaning in bash, such as logical operators, redirection, pipes, etc.
+special meaning in bash, such as substitutions, logical operators, redirection,
+pipes, etc. You have to be conscious of what gets parsed by the shell and what
+will end up verbatim in the generated Dockerfile. Some of the caveats here
+might seem overly complicated, but you will get the gist of it eventually.
+In any case, please remember:
 
-For example, if the following line is found in a \fIDockerfile\fR, it can't be
+.RS 4
+\fBThe best way to learn if your shDockerfile produces the desired Dockerfile
+is to generate a Dockerfile and inspect the output.\fR
+.RE
+
+For example, if the following line is found in a Dockerfile, it can't be
 directly copied into a shDockerfile:
 
 .CODE
@@ -113,10 +126,47 @@ To get around this, we could wrap the offending part in quotes, like:
 RUN mkdir dir '&&' chmod -R user dir
 .ECODE
 
-\fBNOTE:\fR Quotes are parsed in the usual way by the bash shell.
-
 \fBNOTE:\fR Remember that commands matching those in a regular Dockerfile will
 always be capitalized.
+
+.TP
+\fBQuotes\fR
+.RS 4
+
+Quotes and shell variables are parsed and expanded by the shell before they end
+up in the generated Dockerfile. For example:
+
+.CODE
+RUN cp "$file" destination/
+.ECODE
+
+will generate the following Dockerfile (assuming \fBfile=data.txt\fR):
+
+.CODE
+RUN cp data.txt destination/
+.ECODE
+
+Note that shdocker will always preserve individual arguments:
+
+.CODE
+# shDockerfile:
+RUN cat 'my file.txt'
+RUN echo '$variable'
+RUN echo '"test"'
+
+# Generated Dockerfile:
+RUN cat "my file.txt"
+RUN echo "$variable"
+RUN echo "\\"test\\""
+.ECODE
+
+You probably noticed that the single quotes were changed to double quotes.
+Shdocker guarantees that the individual arguments will be preserved, but it
+doesn't guarantee that the same type of quotes will be used in the output.
+
+Shdocker only quotes arguments that contain spaces, quotes or \fB$\fR signs.
+This means that any unnecessary quotes around arguments in the shDockerfile will
+be removed in the generated Dockerfile.
 
 .SH OPTIONS
 
@@ -131,7 +181,7 @@ Prints the \fBshdocker\fR version and supported \fBdocker\fR version.
 .TP
 .BR \-s ", " \-\-shdockerfile " \fIFILE\fR"
 Use \fIFILE\fR as the input shDockerfile. If this option is missing,
-\fIshDockerfile\fR from the working directory is used.
+shDockerfile from the working directory is used.
 
 .TP
 .BR \-d ", " \-\-dockerfile " \fIFILE\fR"

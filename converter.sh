@@ -25,6 +25,11 @@
 # shDockerfile from STDIN
 # --------------------------------------------------------------------
 
+#  Options passed to the SHDOCKER command
+# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+__OPT_QUOTE="on"
+
 if [ ! -f /.dockerenv ] || [ -z "$__SHDOCKER_INSIDE_CONTAINER" ]; then
     echo "This script must be run from shdocker, inside of a docker container" >&2
 fi
@@ -32,6 +37,10 @@ fi
 # Get a list of quoted arguments where necessary. Only ' and " characters are
 # escaped where necessary, others are untouched
 __quote() {
+    if [ -z "$__OPT_QUOTE" ]; then
+        echo "$@"
+        return 0
+    fi
     local arg args
     args=''
 
@@ -91,6 +100,20 @@ REQUIRE_ENV() {
 # Print a comment with the content taken from arguments
 _() {
     echo '#' "$@"
+}
+
+SHDOCKER() {
+    if [ "$1" = "quote" ]; then
+        if [ "$2" = "on" ]; then
+            __OPT_QUOTE="on"
+        elif [ "$2" = "off" ]; then
+            __OPT_QUOTE=""
+        else
+            echo "shdocker: error: SHDOCKER: unrecognized arguments" >&2
+        fi
+    else
+        echo "shdocker: error: SHDOCKER: unrecognized arguments" >&2
+    fi
 }
 
 # The contents of shDockerfile will be appended here by shdocker

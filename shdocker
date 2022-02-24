@@ -26,24 +26,20 @@
 # ┃ Description ┃
 # ┗━━━━━━━━━━━━━┛
 #
-#  Shdocker can run in two modes:
+# Shdocker can run in two modes:
 #
-#  1. The first one just takes in a shDockerfile and generates a Dockerfile,
-#     writing it either to a file or to stdout
-#  2. The second one does all of the above and also builds an image from the
-#     generated Dockerfile
+# 1. The first one just takes in a shDockerfile and generates a Dockerfile,
+#    writing it either to a file or to stdout
+# 2. The second one does all of the above and also builds an image from the
+#    generated Dockerfile
 #
-#  Since the shDockerfile can contain arbitrary shell commands, and there is no
-#  straightforward way to setup a sandbox, the processing of the shDockerfile
-#  must be done inside a container in order to protect the user from fatal
-#  mistakes.
+# Since the shDockerfile can contain arbitrary shell commands, and there is no
+# straightforward way to setup a sandbox, the processing of the shDockerfile
+# must be done inside a container in order to protect the user from fatal
+# mistakes.
 #
-#  Therefore, we run THIS SCRIPT AGAIN in an alpine container with the
-#  __SHDOCKER_INSIDE_CONTAINER env variable set, so that it knows that it should
-#  only generate a Dockerfile from a shDockerfile. On the flipside, this script
-#  without __SHDOCKER_INSIDE_CONTAINER (the instance that the user originally
-#  called) knows that it should not generate the Dockerfile, but instead use the
-#  generated Dockerfile to build a docker image.
+# Therefore, the generation of the Dockerfile is performed by calling the
+# convert.sh script in a docker container.
 
 # ┏━━━━━━━━━━━━━━━━━━┓
 # ┃ HELPER FUNCTIONS ┃
@@ -56,11 +52,6 @@ __check_docker() {
         # TODO add docker version check
         exit 1
     fi
-}
-
-# Check if this instance of shdocker is running in a docker container
-__is_inside_docker_container() {
-    [ -f /.dockerenv ] && [ -n "$__SHDOCKER_INSIDE_CONTAINER" ]
 }
 
 # Usage: __find_docker_image <image_name>
@@ -98,6 +89,7 @@ __pull_alpine_image_if_missing() {
     fi
 }
 
+# Convert shDockerfile from stdin to a Dockerfile and print it to stdout
 __convert() {
     local converter  # Path to the shDockerfile->Dockerfile converter script
     if [ "$__SHDOCKER_VERSION" = "develop" ]; then

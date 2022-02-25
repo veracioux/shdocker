@@ -86,8 +86,13 @@ using the generated Dockerfile for that build.
 \fBNOTE:\fR shDockerfile is just a bash script! In it, you can use
 anything you would be able to use in any bash script. The only commands that
 have special behavior are those supported by Dockerfile (\fBRUN\fR, \fBCMD\fR,
-etc.), and those defined in
-\fIAdditional shell functions\fR.
+etc.), and those defined in \fIAdditional features\fR.
+
+\fBNOTE:\fR Everything that is printed to stdout inside the shDockerfile will be
+included in the generated Dockerfile.
+
+\fBNOTE:\fR The exit code of the shDockerfile is important. If it is != 0,
+shdocker will abort the operation.
 
 \fBNOTE:\fR In order to protect your system from malformed/malicious
 shDockerfiles, the Dockerfile generation process happens inside a docker
@@ -178,8 +183,8 @@ This means that any unnecessary quotes around arguments in the shDockerfile will
 be removed in the generated Dockerfile.
 
 \fBNOTE:\fR You can disable the automatic quoting of arguments by placing a
-\fBSHDOCKER quote off\fR command in the shDockerfile (see \fIAdditional shell
-functions\fR). This way, the following shDockerfile:
+\fBSHDOCKER quote off\fR command in the shDockerfile (see \fIAdditional
+features\fR). This way, the following shDockerfile:
 
 .CODE
 RUN echo '$variable'
@@ -215,7 +220,7 @@ will be to stdout.
 
 shDockerfiles are bash scripts, with a few predefined commands matching those
 available in a regular Dockerfile. In addition to those, shDockerfile accepts
-some additional commands (see \fBAdditional shell functions\fR).
+some additional commands (see \fIAdditional features\fR).
 
 Since shDockerfile is just a bash script, regular and environment variables
 can be used freely. The only limitation is that variables starting with \fB__\fR
@@ -223,7 +228,7 @@ can be used freely. The only limitation is that variables starting with \fB__\fR
 for bash functions, with the addition of the usual Dockerfile commands
 (\fBRUN\fR, \fBENV\fR, ...) which are reserved as well of course.
 
-.SS Additional shell functions
+.SS Additional features
 
 .TP
 \fBREQUIRE_ENV\fR
@@ -242,11 +247,12 @@ has no effect on the generated Dockerfile.
 .RE
 
 .TP
-\fB_\fR (underscore)
+\fB##\fR (double hash comments)
 .RS 4
-Add a comment that will be included into the Dockerfile. Keep in mind that this
-is a function and therefore the arguments will be parsed regularly by the shell.
-You may have to use quotes.
+Comments that start with two hashes at the beginning of a line (potentially
+preceded by whitespace) will be included in the generated Dockerfile. Regular
+bash comments starting with a single hash are also considered comments in
+shdocker, but they won't be exported to the Dockerfile.
 .RE
 
 .TP

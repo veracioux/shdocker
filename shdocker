@@ -231,6 +231,7 @@ __dockerfile_content="$(cat "${__SHDOCKERFILE[@]}" | __convert)"
 
 __exit_status_code="$?"
 if [ "$__exit_status_code" != 0 ]; then
+    echo "$__dockerfile_content"
     exit "$__exit_status_code"
 fi
 

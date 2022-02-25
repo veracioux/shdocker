@@ -10,7 +10,7 @@ build:
 		-e "0,/__DOCKER_VERSION=.*/s::__DOCKER_VERSION='${DOCKER_VERSION}':" \
 		shdocker > _build/shdocker
 
-install: build
+install:
 	@# Install
 	mkdir -p "${DESTDIR}${PREFIX}/bin" \
 			 "${DESTDIR}${PREFIX}/lib/shdocker"

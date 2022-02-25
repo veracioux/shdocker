@@ -73,8 +73,8 @@ for __docker_cmd in "${__DOCKERFILE_COMMANDS[@]}"; do
 done
 
 TAG() {
-    # __IMAGE_TAG_OUTPUT_FILE is an environment variable passed to converter.sh
-    # by shdocker
+    # __IMAGE_TAG_OUTPUT_FILE is an env variable passed from shdocker to this
+    # script
     echo "$1" > "$__IMAGE_TAG_OUTPUT_FILE"
 }
 

@@ -41,6 +41,9 @@
 # Therefore, the generation of the Dockerfile is performed by calling the
 # convert.sh script in a docker container.
 
+__SHDOCKER_VERSION="develop"  # Actual version is injected by Makefile
+__DOCKER_VERSION="develop"    # Ditto
+
 # ┏━━━━━━━━━━━━━━━━━━┓
 # ┃ HELPER FUNCTIONS ┃
 # ┗━━━━━━━━━━━━━━━━━━┛
@@ -67,22 +70,22 @@ __find_docker_image() {
 }
 
 # Run shdocker inside a docker container
-__pull_alpine_image_if_missing() {
-    local alpine_image response
+__pull_bash_image_if_missing() {
+    local bash_image response
     if [ -t 1 ]; then
         echo -ne "\033[1;34m" >&2
         echo -e "To protect you from malicious shDockerfiles, shdocker must run" \
                 "some\ncommands inside a docker container." >&2
         echo -ne "\033[1;0m" >&2
     fi
-    alpine_image="$(__find_docker_image alpine)"
-    if [ -z "$alpine_image" ]; then
-        echo "We must run 'docker pull alpine' (only this first time)." 2>&1
+    bash_image="$(__find_docker_image bash)"
+    if [ -z "$bash_image" ]; then
+        echo "We must run 'docker pull bash' (only this first time)." 2>&1
         echo -n "-- Is that OK? [y/N]: " 2>&1
         read -n 1 response
         if [ "$response" = "y" ] || [ "$response" = "Y" ]; then
             echo
-            docker pull alpine || { echo "Pulling failed. Aborting." 2>&1; exit 1; }
+            docker pull bash || { echo "Pulling failed. Aborting." 2>&1; exit 1; }
         else
             exit 1
         fi
@@ -97,12 +100,20 @@ __convert() {
     else
         converter="$__SHDOCKER_PREFIX"/lib/shdocker/converter.sh
     fi
-    local __SHDOCKER_INSIDE_CONTAINER
+    local __SHDOCKER_INSIDE_CONTAINER EOF
     export __SHDOCKER_INSIDE_CONTAINER='true'
+
+    local -
+    set -e
+
+    EOF="__SHDOCKER_UNLIKELY_EOF_CHARACTER"
     # Concatenate the converter script with the shDockerfile and pipe it to bash
     # launched inside a docker container.
-    cat "$converter" <(cat) |
-        docker run --env-file <(env | cut -f1 -d= | grep -v '^PATH$') -i bash bash
+    {
+        cat "$converter"
+        cat
+    } | sed "s/^\([[:space:]]\)*##\(.*\)/cat <<$EOF\n\1#\2\n$EOF/g" \
+      | docker run --env-file <(env | cut -f1 -d= | grep -v '^PATH$') -i bash bash
 }
 
 __print_and_exec() {
@@ -114,9 +125,6 @@ if [ "$EUID" == '0' ]; then
     echo "shdocker: error: You can't run shdocker as the root user!" >&2
     exit 1
 fi
-
-__SHDOCKER_VERSION="develop"  # Actual version is injected by Makefile
-__DOCKER_VERSION=""  # Ditto
 
 __print_usage() {
     echo -e "usage: shdocker [OPTIONS] [-- DOCKER_BUILD_ARGS...]"
@@ -216,21 +224,29 @@ fi
 
 # Generate Dockerfile from shDockerfile
 
-__pull_alpine_image_if_missing
+__pull_bash_image_if_missing
+# This env variable is passed to converter.sh
 export __IMAGE_TAG_OUTPUT_FILE="$(mktemp /tmp/shdocker.XXXXXXXXXXXXXXXXXXXX)"
+__dockerfile_content="$(cat "${__SHDOCKERFILE[@]}" | __convert)"
+
+__exit_status_code="$?"
+if [ "$__exit_status_code" != 0 ]; then
+    exit "$__exit_status_code"
+fi
+
 if [ "$__PSEUDO_DOCKERFILE" != "-" ]; then
     # Output Dockerfile is a real file
-    cat "${__SHDOCKERFILE[@]}" | __convert > "$__PSEUDO_DOCKERFILE"
+    echo "$__dockerfile_content" > "$__PSEUDO_DOCKERFILE"
     __BUILT_DOCKERFILE="$__PSEUDO_DOCKERFILE"
 else
     # Output is to stdout
-    cat "${__SHDOCKERFILE[@]}" | __convert | tee "$__RANDOM_DOCKERFILE"
+    echo "$__dockerfile_content" | tee "$__RANDOM_DOCKERFILE"
     __BUILT_DOCKERFILE="$__RANDOM_DOCKERFILE"
 fi
 
 # Run docker build from the generated Dockerfile
 if [ "${#__positional[@]}" -gt 0 ]; then
-    # Build 
+    # Build
     __EXTRA_ARGS=()
     __IMAGE_TAG="$(cat "$__IMAGE_TAG_OUTPUT_FILE")"
     if [ -n "$__IMAGE_TAG" ]; then

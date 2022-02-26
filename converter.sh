@@ -97,11 +97,6 @@ REQUIRE_ENV() {
     fi
 }
 
-# Print a comment with the content taken from arguments
-_() {
-    echo '#' "$@"
-}
-
 SHDOCKER() {
     if [ "$1" = "quote" ]; then
         if [ "$2" = "on" ]; then
@@ -114,6 +109,12 @@ SHDOCKER() {
     else
         echo "shdocker: error: SHDOCKER: unrecognized arguments" >&2
     fi
+}
+
+# Override some builtins to ensure parsing of ## comments
+
+source() {
+    builtin source <(sed "s/^[[:space:]]*##\(.*\)/cat <<$EOF\n#\1\n$EOF/g" "$@")
 }
 
 # The contents of shDockerfile will be appended here by shdocker

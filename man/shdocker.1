@@ -96,7 +96,7 @@ shdocker will abort the operation.
 
 \fBNOTE:\fR In order to protect your system from malformed/malicious
 shDockerfiles, the Dockerfile generation process happens inside a docker
-container based on an official \fBalpine\fR image.
+container based on an official \fBbash\fR image.
 
 \fBWARNING:\fR If you are porting an existing Dockerfile to a more flexible
 shDockerfile, take a look at \fIMIGRATING FROM DOCKERFILE\fR first.
@@ -227,6 +227,16 @@ can be used freely. The only limitation is that variables starting with \fB__\fR
 (two underscores) are reserved for \fBshdocker\fR's internal use. The same goes
 for bash functions, with the addition of the usual Dockerfile commands
 (\fBRUN\fR, \fBENV\fR, ...) which are reserved as well of course.
+
+\fBNOTE:\fR To protect your system, the generation of a Dockerfile from a
+shDockerfile is performed inside a docker container. If the current context is
+inside a docker container, no additional container is spawned.
+
+.SS Working directory
+
+The working directory of the shDockerfile context is always the same as the
+directory where the shDockerfile resides. This allows you to source files inside
+the shDockerfile script using relative paths.
 
 .SS Additional features
 

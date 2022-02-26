@@ -71,6 +71,7 @@ __find_docker_image() {
 
 # Run shdocker inside a docker container
 __pull_bash_image_if_missing() {
+    if __inside_container; then return 0; fi
     local bash_image response
     if [ -t 1 ]; then
         echo -ne "\033[1;34m" >&2
@@ -89,6 +90,24 @@ __pull_bash_image_if_missing() {
         else
             exit 1
         fi
+    fi
+}
+
+# Test if we are currently in a docker container
+__inside_container() {
+    [ -f "/.dockerenv" ]
+}
+
+__bash_in_container() {
+    if __inside_container; then
+        cat | bash "$@"
+    else
+        cat \
+            | docker run \
+                --env-file <(env | cut -f1 -d= | grep -v '^PATH$') \
+                --workdir "/shdocker" \
+                --volume "$(realpath "$(dirname "$__SHDOCKERFILE")"):/shdocker:ro" \
+                -i bash bash "$@"
     fi
 }
 
@@ -112,8 +131,11 @@ __convert() {
     {
         cat "$converter"
         cat
-    } | sed "s/^\([[:space:]]\)*##\(.*\)/cat <<$EOF\n\1#\2\n$EOF/g" \
-      | docker run --env-file <(env | cut -f1 -d= | grep -v '^PATH$') -i bash bash
+    } |
+        # Make it so that ## comments are included in the output
+        sed "s/^[[:space:]]*##\(.*\)/cat <<$EOF\n#\1\n$EOF/g" |
+        # Source by bash running in a docker container
+        __bash_in_container
 }
 
 __print_and_exec() {
@@ -121,8 +143,8 @@ __print_and_exec() {
     "$@"
 }
 
-if [ "$EUID" == '0' ]; then
-    echo "shdocker: error: You can't run shdocker as the root user!" >&2
+if [ "$EUID" == '0' ] && ! __inside_container; then
+    echo "shdocker: error: Root user can run shdocker only in a container!" >&2
     exit 1
 fi
 
@@ -205,7 +227,7 @@ do
     esac
 done
 
-__check_docker
+__inside_container || __check_docker
 
 if [ -n "$__SHDOCKERFILE" ] && [ ! -f "$__SHDOCKERFILE" ]; then
     echo "shdocker: error: File $__SHDOCKERFILE could not be found."

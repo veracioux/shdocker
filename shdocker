@@ -107,6 +107,7 @@ __bash_in_container() {
                 --env-file <(env | cut -f1 -d= | grep -v '^PATH$') \
                 --workdir "/shdocker" \
                 --volume "$(realpath "$(dirname "$__SHDOCKERFILE")"):/shdocker:ro" \
+                --volume "/tmp:/tmp:rw" \
                 -i bash bash "$@"
     fi
 }
@@ -248,7 +249,7 @@ fi
 
 __pull_bash_image_if_missing
 # This env variable is passed to converter.sh
-export __IMAGE_TAG_OUTPUT_FILE="$(mktemp /tmp/shdocker.XXXXXXXXXXXXXXXXXXXX)"
+export __IMAGE_TAG_OUTPUT_FILE="$(mktemp -u /tmp/shdocker.XXXXXXXXXXXXXXXXXXXX)"
 __dockerfile_content="$(cat "${__SHDOCKERFILE[@]}" | __convert)"
 
 __exit_status_code="$?"

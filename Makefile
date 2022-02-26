@@ -13,9 +13,11 @@ build:
 install:
 	@# Install
 	mkdir -p "${DESTDIR}${PREFIX}/bin" \
-			 "${DESTDIR}${PREFIX}/lib/shdocker"
+			 "${DESTDIR}${PREFIX}/lib/shdocker" \
+			 "${DESTDIR}${PREFIX}/share/man/man1/"
 	install -Dm755 _build/shdocker "${DESTDIR}${PREFIX}/bin/"
 	install -Dm755 converter.sh    "${DESTDIR}${PREFIX}/lib/shdocker/"
+	install -Dm644 man/shdocker.1  "${DESTDIR}${PREFIX}/share/man/man1/"
 
 clean:
 	rm -rf _build

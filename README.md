@@ -2,6 +2,7 @@
 <h2 align="center">Dockerfiles with shell superpowers</h2>
 
 <p align="center">
+  <a href="https://aur.archlinux.org/packages/shdocker/"> <img src="https://img.shields.io/aur/version/shdocker?label=AUR" alt="AUR"/> </a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blueviolet" alt="License"/></a>
   <a href="https://matrix.org/#/#shdocker:matrix.org">
     <img src="https://img.shields.io/static/v1?label=Chat&message=matrix&color=%23c2185b">

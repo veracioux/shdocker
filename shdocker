@@ -34,12 +34,12 @@
 #    generated Dockerfile
 #
 # Since the shDockerfile can contain arbitrary shell commands, and there is no
-# straightforward way to setup a sandbox, the processing of the shDockerfile
+# straightforward way to set up a sandbox, the processing of the shDockerfile
 # must be done inside a container in order to protect the user from fatal
 # mistakes.
 #
 # Therefore, the generation of the Dockerfile is performed by calling the
-# convert.sh script in a docker container.
+# converter.sh script in a docker container.
 
 __SHDOCKER_VERSION="develop"  # Actual version is injected by Makefile
 __DOCKER_VERSION="develop"    # Ditto
@@ -61,6 +61,7 @@ __check_docker() {
 # Prints the exact image reference (<image_name>:<tag>) or returns 1 if it
 # doesn't exist
 __find_docker_image() {
+    local results
     results="$(
         docker images --filter "reference=$1:*" \
             --format "{{.Repository}}:{{.Tag}}" |
@@ -100,7 +101,7 @@ __inside_container() {
 
 __bash_in_container() {
     if __inside_container; then
-        cat | bash "$@"
+        cat | bash
     else
         cat \
             | docker run \
@@ -108,7 +109,7 @@ __bash_in_container() {
                 --workdir "/shdocker" \
                 --volume "$(realpath "$(dirname "$__SHDOCKERFILE")"):/shdocker:ro" \
                 --volume "/tmp:/tmp:rw" \
-                -i bash bash "$@"
+                -i bash bash
     fi
 }
 

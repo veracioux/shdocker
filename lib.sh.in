@@ -1,0 +1,22 @@
+# Common shell functions
+
+# Get a list of quoted arguments where necessary. Only ' and " characters are
+# escaped where necessary, others are untouched
+__quote() {
+    if [ -z "$__OPT_QUOTE" ]; then
+        echo "$@"
+        return 0
+    fi
+    local arg args
+    args=''
+
+    for arg in "$@"; do
+        if grep -q "['\"$ \\\\]" <<<"$arg"; then
+            arg="$(sed -e 's:\\:\\\\:g' -e 's:":\\":g' -e 's:.*:"&":' <<<"$arg")"
+            echo -n "$args$arg "
+        else
+            echo -n "$args$arg "
+        fi
+    done | sed 's:\s*$::'  # Remove trailing whitespace
+}
+

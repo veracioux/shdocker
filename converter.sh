@@ -34,26 +34,6 @@ if [ ! -f /.dockerenv ] || [ -z "$__SHDOCKER_INSIDE_CONTAINER" ]; then
     echo "This script must be run from shdocker, inside of a docker container" >&2
 fi
 
-# Get a list of quoted arguments where necessary. Only ' and " characters are
-# escaped where necessary, others are untouched
-__quote() {
-    if [ -z "$__OPT_QUOTE" ]; then
-        echo "$@"
-        return 0
-    fi
-    local arg args
-    args=''
-
-    for arg in "$@"; do
-        if grep -q "['\"$ \\\\]" <<<"$arg"; then
-            arg="$(sed -e 's:\\:\\\\:g' -e 's:":\\":g' -e 's:.*:"&":' <<<"$arg")"
-            echo -n "$args$arg "
-        else
-            echo -n "$args$arg "
-        fi
-    done | sed 's:\s*$::'  # Remove trailing whitespace
-}
-
 # Run the docker command from "$1" with arguments from "${@:2}"
 __dockerfile_command() {
     echo "$1" "$(__quote "${@:2}")"
@@ -64,7 +44,7 @@ __dockerfile_command() {
 # ┗━━━━━━━━┛
 
 __DOCKERFILE_COMMANDS=(
-    FROM MAINTAINER RUN CMD POINT LABEL EXPOSE ENV ADD COPY ENTRYPOINT VOLUME
+    FROM MAINTAINER RUN CMD LABEL EXPOSE ENV ADD COPY ENTRYPOINT VOLUME
     USER WORKDIR ARG ONBUILD STOPSIGNAL HEALTHCHECK SHELL
 )
 

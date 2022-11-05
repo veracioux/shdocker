@@ -41,8 +41,10 @@
 # Therefore, the generation of the Dockerfile is performed by calling the
 # converter.sh script in a docker container.
 
-__SHDOCKER_VERSION="develop"  # Actual version is injected by Makefile
-__DOCKER_VERSION="develop"    # Ditto
+# Do not edit this paragraph unless you fully understand what `make build` does
+__SHDOCKER_VERSION="develop"    # Actual value is injected by Makefile
+__SHDOCKER_PREFIX="/usr/local"  # Ditto
+__DOCKER_VERSION="develop"      # Ditto
 
 # ┏━━━━━━━━━━━━━━━━━━┓
 # ┃ HELPER FUNCTIONS ┃
@@ -115,11 +117,13 @@ __bash_in_container() {
 
 # Convert shDockerfile from stdin to a Dockerfile and print it to stdout
 __convert() {
-    local converter  # Path to the shDockerfile->Dockerfile converter script
+    local converter lib
     if [ "$__SHDOCKER_VERSION" = "develop" ]; then
-        converter="$(dirname "${BASH_SOURCE[0]}")"/converter.sh 
+        converter="$(dirname "${BASH_SOURCE[0]}")"/converter.sh
+        lib="$(dirname "${BASH_SOURCE[0]}")"/lib.sh.in
     else
         converter="$__SHDOCKER_PREFIX"/lib/shdocker/converter.sh
+        lib="$__SHDOCKER_PREFIX"/lib/shdocker/lib.sh.in
     fi
     local __SHDOCKER_INSIDE_CONTAINER EOF
     export __SHDOCKER_INSIDE_CONTAINER='true'
@@ -128,15 +132,16 @@ __convert() {
     set -e
 
     EOF="__SHDOCKER_UNLIKELY_EOF_CHARACTER"
-    # Concatenate the converter script with the shDockerfile and pipe it to bash
-    # launched inside a docker container.
+    # Concatenate the converter script with the shDockerfile and pipe it to a
+    # dockerized bash shell.
     {
+        cat "$lib"
         cat "$converter"
         cat
     } |
         # Make it so that ## comments are included in the output
         sed "s/^[[:space:]]*##\(.*\)/cat <<$EOF\n#\1\n$EOF/g" |
-        # Source by bash running in a docker container
+        # Source by a dockerized bash shell
         __bash_in_container
 }
 

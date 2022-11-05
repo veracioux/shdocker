@@ -15,7 +15,11 @@ install:
 	mkdir -p "${DESTDIR}${PREFIX}/bin" \
 			 "${DESTDIR}${PREFIX}/lib/shdocker" \
 			 "${DESTDIR}${PREFIX}/share/man/man1/"
-	install -Dm755 _build/shdocker "${DESTDIR}${PREFIX}/bin/"
+	cat _build/shdocker | sed "0,/__SHDOCKER_PREFIX=.*/s::__SHDOCKER_PREFIX='${PREFIX}':" > /tmp/shdocker_with_injected_vars
+	chmod a+rw /tmp/shdocker_with_injected_vars
+	@# Inject a __SHDOCKER_PREFIX variable definition into the shdocker script
+	install -Dm755 /tmp/shdocker_with_injected_vars "${DESTDIR}${PREFIX}/bin/shdocker"
+	install -Dm755 lib.sh.in       "${DESTDIR}${PREFIX}/lib/shdocker/"
 	install -Dm755 converter.sh    "${DESTDIR}${PREFIX}/lib/shdocker/"
 	install -Dm644 man/shdocker.1  "${DESTDIR}${PREFIX}/share/man/man1/"
 

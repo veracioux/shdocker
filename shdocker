@@ -105,8 +105,10 @@ __bash_in_container() {
     if __inside_container; then
         cat | bash
     else
+        local user
         cat \
             | docker run \
+                --user "$(id -u):$(id -g)" \
                 --env-file <(env | cut -f1 -d= | grep -v '^PATH$') \
                 --workdir "/shdocker" \
                 --volume "$(realpath "$(dirname "$__SHDOCKERFILE")"):/shdocker:ro" \

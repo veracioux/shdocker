@@ -20,3 +20,13 @@ __quote() {
     done | sed 's:\s*$::'  # Remove trailing whitespace
 }
 
+# Replace ocurrences of '##.*' at beginnings of lines (possibly preceded by
+# whitespace) from stdin with echoing the content of the line, also removing the
+# first '#' character.
+__replace_double_comments() {
+    local EOF
+    EOF="__SHDOCKER_UNLIKELY_EOF_CHARACTER"
+    sed "s/^[[:space:]]*##\(.*\)/cat <<$EOF\n#\1\n$EOF/g"
+}
+
+# vim: filetype=sh

@@ -50,6 +50,16 @@ __DOCKER_VERSION="develop"      # Ditto
 # ┃ HELPER FUNCTIONS ┃
 # ┗━━━━━━━━━━━━━━━━━━┛
 
+__get_lib_dir_path() {
+    if [ "$__SHDOCKER_VERSION" = "develop" ]; then
+        echo "$(dirname "${BASH_SOURCE[0]}")"
+    else
+        echo "$__SHDOCKER_PREFIX/lib/shdocker"
+    fi
+}
+
+source "$(__get_lib_dir_path)/lib.sh.in"
+
 # Check if the 'docker' command exists on the system
 __check_docker() {
     if ! which docker >/dev/null; then
@@ -119,21 +129,17 @@ __bash_in_container() {
 
 # Convert shDockerfile from stdin to a Dockerfile and print it to stdout
 __convert() {
-    local converter lib
-    if [ "$__SHDOCKER_VERSION" = "develop" ]; then
-        converter="$(dirname "${BASH_SOURCE[0]}")"/converter.sh
-        lib="$(dirname "${BASH_SOURCE[0]}")"/lib.sh.in
-    else
-        converter="$__SHDOCKER_PREFIX"/lib/shdocker/converter.sh
-        lib="$__SHDOCKER_PREFIX"/lib/shdocker/lib.sh.in
-    fi
-    local __SHDOCKER_INSIDE_CONTAINER EOF
+    local lib_dir converter lib
+    lib_dir="$(__get_lib_dir_path)"
+    converter="$lib_dir"/converter.sh
+    lib="$lib_dir"/lib.sh.in
+
+    local __SHDOCKER_INSIDE_CONTAINER
     export __SHDOCKER_INSIDE_CONTAINER='true'
 
     local -
     set -e
 
-    EOF="__SHDOCKER_UNLIKELY_EOF_CHARACTER"
     # Concatenate the converter script with the shDockerfile and pipe it to a
     # dockerized bash shell.
     {
@@ -142,7 +148,7 @@ __convert() {
         cat
     } |
         # Make it so that ## comments are included in the output
-        sed "s/^[[:space:]]*##\(.*\)/cat <<$EOF\n#\1\n$EOF/g" |
+        __replace_double_comments |
         # Source by a dockerized bash shell
         __bash_in_container
 }

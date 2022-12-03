@@ -94,7 +94,7 @@ SHDOCKER() {
 # Override some builtins to ensure parsing of ## comments
 
 source() {
-    builtin source <(sed "s/^[[:space:]]*##\(.*\)/cat <<$EOF\n#\1\n$EOF/g" "$@")
+    builtin source <(__replace_double_comments <"$1")
 }
 
 # The contents of shDockerfile will be appended here by shdocker
